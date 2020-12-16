@@ -4,103 +4,111 @@
 #include<string.h>
 
 #define SYS_NAME "jcywjwwx"
-#define BLOCKSIZE 1024          //Ò»¸ö´ÅÅÌ¿é´óĞ¡
-#define ALLBLOCKS 1024000       //ËùÓĞ´ÅÅÌ¿é×Ü´óĞ¡
-#define MAX_OPEN_FILES 10       //×î¶à´ò¿ªÎÄ¼şÊı
-#define IBLOCKS 10              //¸øi½Úµã·ÖÅäµÄ´ÅÅÌ¿éÊıÁ¿
+#define BLOCKSIZE 1024          //ä¸€ä¸ªç£ç›˜å—å¤§å°
+#define ALLBLOCKS 1024000       //æ‰€æœ‰ç£ç›˜å—æ€»å¤§å°
+#define MAX_OPEN_FILES 10       //æœ€å¤šæ‰“å¼€æ–‡ä»¶æ•°
+#define IBLOCKS 10              //ç»™ièŠ‚ç‚¹åˆ†é…çš„ç£ç›˜å—æ•°é‡
 
 #define MAX_I 10
+#define MAX_PATH_LENGTH 80
 
-//Ò»Î»µÄÊı¾İ£¬Î»Ê¾Í¼Ê¹ÓÃ
+//ä¸€ä½çš„æ•°æ®ï¼Œä½ç¤ºå›¾ä½¿ç”¨
 typedef struct Bit{
     unsigned int data:1;
 }Bit;
 
 typedef struct FCB{
-    unsigned char fileName[8];   //8BÎÄ¼şÃû
-    unsigned short iNum;          //i½Úµã±àºÅ
+    unsigned char fileName[8];   //8Bæ–‡ä»¶å
+    unsigned char exName[3];
+    unsigned short iNum;          //ièŠ‚ç‚¹ç¼–å·
 }fcb;
 
 typedef struct INode{
-    unsigned char exName[3];		//À©Õ¹Ãû 3B
-    unsigned char attribute;		//ÎÄ¼şÊôĞÔ×Ö¶Î1B
-    unsigned short time;			//ÎÄ¼ş´´½¨Ê±¼ä2B
-    unsigned short date;			//ÎÄ¼ş´´½¨ÈÕÆÚ2B
-    unsigned short blockNum;			//¿éºÅ2B
-    long length;        //³¤¶È                4B
+    unsigned char exName[3];		//æ‰©å±•å 3B
+    unsigned char attribute;		//æ–‡ä»¶å±æ€§å­—æ®µ1B
+    unsigned short time;			//æ–‡ä»¶åˆ›å»ºæ—¶é—´2B
+    unsigned short date;			//æ–‡ä»¶åˆ›å»ºæ—¥æœŸ2B
+    unsigned short blockNum;			//å—å·2B
+    long length;        //é•¿åº¦                4B
 }iNode;
 
-//´ò¿ªÎÄ¼şµÄĞÅÏ¢
+//æ‰“å¼€æ–‡ä»¶çš„ä¿¡æ¯
 typedef struct Opened{
-    unsigned char fileName[8];   //ÎÄ¼şÃû
-    unsigned char exName[3];		//À©Õ¹Ãû*/3B
-    unsigned char attribute;		//ÎÄ¼şÊôĞÔ×Ö¶Î1B
-    unsigned short time;			//ÎÄ¼ş´´½¨Ê±¼ä2B
-    unsigned short date;			//ÎÄ¼ş´´½¨ÈÕÆÚ2B
-    unsigned short blockNum;			//¿éºÅ2B
-    long length;        //³¤¶È4B
+    unsigned char fileName[8];   //æ–‡ä»¶å
+    unsigned char exName[3];		//æ‰©å±•å*/3B
+    unsigned char attribute;		//æ–‡ä»¶å±æ€§å­—æ®µ1B
+    unsigned short time;			//æ–‡ä»¶åˆ›å»ºæ—¶é—´2B
+    unsigned short date;			//æ–‡ä»¶åˆ›å»ºæ—¥æœŸ2B
+    unsigned short blockNum;			//å—å·2B
+    long length;        //é•¿åº¦4B
 
-    /* ÒÔÏÂÎª·ÇpcbÖĞĞÅÏ¢ */
-    unsigned char free;          //±íÊ¾¸ÃÊı¾İ½á¹¹ÊÇ·ñ±»Ê¹ÓÃ
-    unsigned char *contents;//´æ·ÅÄ¿Â¼,Ö»ÓĞÒ»¿éµÄ´óĞ¡
-
+    /* ä»¥ä¸‹ä¸ºépcbä¸­ä¿¡æ¯ */
+    unsigned char free;          //è¡¨ç¤ºè¯¥æ•°æ®ç»“æ„æ˜¯å¦è¢«ä½¿ç”¨
+    unsigned char *contents;//å­˜æ”¾ç›®å½•,åªæœ‰ä¸€å—çš„å¤§å°
+    unsigned char path[MAX_PATH_LENGTH]; //è¯¥æ‰“å¼€æ–‡ä»¶çš„çˆ¶è·¯å¾„
+    int fatherFd;
 
 }Opened;
 
-//Òıµ¼¿é
+//å¼•å¯¼å—
 typedef struct BLOCK0{
-    unsigned short rootBlock;    //root¿éºÅ
+    unsigned short rootBlock;    //rootå—å·
 
-    unsigned short iptr;                    //i±íÖĞµÄÎ»ÖÃ
-    unsigned short blockptr;                   //block±íÖĞµÄÎ»ÖÃ
-    Bit discTable[MAX_I][ALLBLOCKS/BLOCKSIZE/MAX_I];     //´ÅÅÌµÄÎ»Ê¾Í¼
-    Bit iTable[MAX_I][BLOCKSIZE*IBLOCKS/sizeof(iNode)/MAX_I];                                 //i½ÚµãµÄÎ»Ê¾Í¼,¼ÆËãµÃ³ö´óÔ¼ÄÜ´æBLOCKSIZE*10/sizeof(iNode)¸öi½Úµã
+    unsigned short iptr;                    //iè¡¨ä¸­çš„ä½ç½®
+    unsigned short blockptr;                   //blockè¡¨ä¸­çš„ä½ç½®
+    Bit discTable[MAX_I][ALLBLOCKS/BLOCKSIZE/MAX_I];     //ç£ç›˜çš„ä½ç¤ºå›¾
+    Bit iTable[MAX_I][BLOCKSIZE*IBLOCKS/sizeof(iNode)/MAX_I];                                 //ièŠ‚ç‚¹çš„ä½ç¤ºå›¾,è®¡ç®—å¾—å‡ºå¤§çº¦èƒ½å­˜BLOCKSIZE*10/sizeof(iNode)ä¸ªièŠ‚ç‚¹
 }block0;
 
-unsigned char *Disc;                    //´ÅÅÌ¿Õ¼äÊ×µØÖ·
-Opened openFileList[MAX_OPEN_FILES];    //×î´ó´ò¿ªÎÄ¼şÊı
-Opened *currentContent;                     //µ±Ç°´ò¿ªµÄÄ¿Â¼
+unsigned char *Disc;                    //ç£ç›˜ç©ºé—´é¦–åœ°å€
+Opened openFileList[MAX_OPEN_FILES];    //æœ€å¤§æ‰“å¼€æ–‡ä»¶æ•°
 int curfd;
 
-void start();               //Æô¶¯
-void format();              //¸ñÊ½»¯
-void my_exit();                //ÍË³öÏµÍ³
-void ls();
+void start();               //å¯åŠ¨
+void format();              //æ ¼å¼åŒ–
+void my_exit();                //é€€å‡ºç³»ç»Ÿ
+void ls();                      //å±•ç¤ºå½“å‰ç›®å½•æ–‡ä»¶
+int open(unsigned char *path,int tempFd);   //æ‰“å¼€æ–‡ä»¶
+void changeDir(unsigned char *path);       //cdæ“ä½œ
 
-/* ÒÔÏÂÎª¹¤¾ßº¯Êı */
+/* ä»¥ä¸‹ä¸ºå·¥å…·å‡½æ•° */
 struct tm *getNowTime();
-iNode *getI(unsigned short iNum);      //¸ù¾İi½ÚµãºÅ»ñÈ¡i½ÚµãÊ×µØÖ·
-unsigned char *getBlock(unsigned short blockNum);  //¸ù¾İÅÌ¿ÚºÅ»ñÈ¡ÅÌ¿ÚÖ¸Õë
-block0 *getBlock0();                    //»ñÈ¡Òıµ¼¿é
-unsigned short getEmptyI();             //»ñÈ¡Ò»¸ö¿Õi½ÚµãµÄºÅÂë,Î´ÕÒµ½·µ»Ø0
-unsigned short getEmptyBlock();         //»ñÈ¡Ò»¸ö¿Õ¿éµÄºÅÂë,Î´ÕÒµ½·µ»Ø0
-int getFreeOpened();                    //»ñÈ¡¿ÕÇøÓò
-void occupyBlock(unsigned short blockNum);  //±ê´ÅÅÌ¿é±»Õ¼ÓÃ
-void occupyI(unsigned short iNum);          //±ê¼Çi½Úµã±»Õ¼ÓÃ
-void releaseBlock(unsigned short blockNum); //±ê¼Ç´ÅÅÌ¿é±»ÊÍ·Å 0
-void releaseI(unsigned short iNum);         //±ê¼Çi½Úµã±»ÊÍ·Å 0
-int isEmptyI(unsigned short iNum);          //ÅĞ¶ÏÖ¸¶¨i½ÚµãÊÇ·ñÊÇ¿Õi½Úµã
-int isEmptyBlock(unsigned short blockNum);  //ÅĞ¶ÏÖ¸¶¨blockÊÇ·ñÊÇ¿Õblock
+iNode *getI(unsigned short iNum);      //æ ¹æ®ièŠ‚ç‚¹å·è·å–ièŠ‚ç‚¹é¦–åœ°å€
+unsigned char *getBlock(unsigned short blockNum);  //æ ¹æ®ç›˜å£å·è·å–ç›˜å£æŒ‡é’ˆ
+block0 *getBlock0();                    //è·å–å¼•å¯¼å—
+unsigned short getEmptyI();             //è·å–ä¸€ä¸ªç©ºièŠ‚ç‚¹çš„å·ç ,æœªæ‰¾åˆ°è¿”å›0
+unsigned short getEmptyBlock();         //è·å–ä¸€ä¸ªç©ºå—çš„å·ç ,æœªæ‰¾åˆ°è¿”å›0
+int getEmptyOpened();                    //è·å–ç©ºåŒºåŸŸ
+void occupyBlock(unsigned short blockNum);  //æ ‡ç£ç›˜å—è¢«å ç”¨
+void occupyI(unsigned short iNum);          //æ ‡è®°ièŠ‚ç‚¹è¢«å ç”¨
+void releaseBlock(unsigned short blockNum); //æ ‡è®°ç£ç›˜å—è¢«é‡Šæ”¾ 0
+void releaseI(unsigned short iNum);         //æ ‡è®°ièŠ‚ç‚¹è¢«é‡Šæ”¾ 0
+int isEmptyI(unsigned short iNum);          //åˆ¤æ–­æŒ‡å®šièŠ‚ç‚¹æ˜¯å¦æ˜¯ç©ºièŠ‚ç‚¹
+int isEmptyBlock(unsigned short blockNum);  //åˆ¤æ–­æŒ‡å®šblockæ˜¯å¦æ˜¯ç©ºblock
+int writeBlock(unsigned short blockNum,int ptr,long length,char *text);
+void copyToOpend(int openedFd,iNode *ip,fcb *cp);
+char *splitPath(char *path);                //åˆ†å‰²å‡ºpathåé¢éƒ¨åˆ†
+int openByName(int fd,unsigned char *name); //é€šè¿‡æ–‡ä»¶åæ‰“å¼€å½“å‰ç›®å½•ä¸‹çš„æ–‡ä»¶
 
-/******************* ÒÔÏÂÎªÖ÷ÒªÏµÍ³º¯Êı *******************/
-//Æô¶¯ÎÄ¼şÏµÍ³
+/******************* ä»¥ä¸‹ä¸ºä¸»è¦ç³»ç»Ÿå‡½æ•° *******************/
+//å¯åŠ¨æ–‡ä»¶ç³»ç»Ÿ
 void start(){
-    /* ³õÊ¼»¯ĞéÄâ´ÅÅÌ */
-    Disc = (unsigned char *)malloc(ALLBLOCKS);          //³õÊ¼»¯ĞéÄâ´ÅÅÌ
-    memset(Disc,0,ALLBLOCKS);                           //¸³³õÖµÎª\0
+    /* åˆå§‹åŒ–è™šæ‹Ÿç£ç›˜ */
+    Disc = (unsigned char *)malloc(ALLBLOCKS);          //åˆå§‹åŒ–è™šæ‹Ÿç£ç›˜
+    memset(Disc,0,ALLBLOCKS);                           //èµ‹åˆå€¼ä¸º\0
 
     FILE *f;
-    f = fopen(SYS_NAME,"r");                            //´ò¿ªÎÄ¼ş
+    f = fopen(SYS_NAME,"r");                            //æ‰“å¼€æ–‡ä»¶
     if(f){
-        fread(Disc,ALLBLOCKS,1,f);                      //ĞÅÏ¢¶ÁÈëĞéÄâ´ÅÅÌÖĞ
-        fclose(f);                                      //¶ÁÈ¡Íê¹Ø±ÕÎÄ¼ş
+        fread(Disc,ALLBLOCKS,1,f);                      //ä¿¡æ¯è¯»å…¥è™šæ‹Ÿç£ç›˜ä¸­
+        fclose(f);                                      //è¯»å–å®Œå…³é—­æ–‡ä»¶
         if(Disc[0] == '\0')
             format();
     }else{
         format();
     }
 
-    /* ³õÊ¼»¯ÄÚ´æÖĞĞÅÏ¢£¬Èç¸ùÄ¿Â¼ */
+    /* åˆå§‹åŒ–å†…å­˜ä¸­ä¿¡æ¯ï¼Œå¦‚æ ¹ç›®å½• */
     iNode *rootI;
     unsigned char *p;
 
@@ -109,7 +117,7 @@ void start(){
 
     int i = 0;
     strcpy(openFileList[i].fileName,"root");
-    strcpy(openFileList[i].exName,rootI->exName);
+    strcpy(openFileList[i].exName,"di");
     openFileList[i].blockNum = rootI->blockNum;
     openFileList[i].attribute = rootI->attribute;
     openFileList[i].date = rootI->date;
@@ -118,8 +126,10 @@ void start(){
 
     openFileList[i].free = 1;
     openFileList[i].contents = (unsigned char*)malloc(BLOCKSIZE);
+    strcpy(openFileList[i].path,"/");
+    openFileList[i].fatherFd = 0;
     int j;
-    for(j = 0;j<BLOCKSIZE;j++){                 //°ÑÄ¿Â¼ĞÅÏ¢¸´ÖÆ³öÀ´
+    for(j = 0;j<BLOCKSIZE;j++){                 //æŠŠç›®å½•ä¿¡æ¯å¤åˆ¶å‡ºæ¥
         openFileList[i].contents[j] = p[j];
     }
 
@@ -127,7 +137,7 @@ void start(){
 
 }
 
-//¸ñÊ½»¯ÎÄ¼şÏµÍ³
+//æ ¼å¼åŒ–æ–‡ä»¶ç³»ç»Ÿ
 void format(){
     printf("starting format disc !!!\n");
     int i;
@@ -135,49 +145,52 @@ void format(){
     struct tm *nowTime;
     FILE *f;
 
-    unsigned char *p;       //Í·Ö¸Õë
-    unsigned char *ip;      //i½ÚµãµÄÖ¸Õë
-    block0 *b;      //Òıµ¼¿é
-    fcb *rootContent; //¸ùÄ¿Â¼
-    iNode *rootI;          //¸ùÄ¿Â¼µÄi½Úµã
+    unsigned char *p;       //å¤´æŒ‡é’ˆ
+    unsigned char *ip;      //ièŠ‚ç‚¹çš„æŒ‡é’ˆ
+    block0 *b;      //å¼•å¯¼å—
+    fcb *rootContent; //æ ¹ç›®å½•
+    iNode *rootI;          //æ ¹ç›®å½•çš„ièŠ‚ç‚¹
 
-    /* ³õÊ¼»¯Òıµ¼¿é */
+    /* åˆå§‹åŒ–å¼•å¯¼å— */
     p = Disc;
     b = (block0 *)p;
-    b->rootBlock = 12;      //µÚÊ®¶ş¿é
-    b->iptr = 2;           //iptrÖ¸ÕëÖ±½Óµ½µÚ¶ş¿é
-    b->blockptr = 13;      //block²éÑ¯Ö¸ÕëÖ±½Óµ½µÚ13¿é
+    b->rootBlock = 12;      //ç¬¬åäºŒå—
+    b->iptr = 2;           //iptræŒ‡é’ˆç›´æ¥åˆ°ç¬¬äºŒå—
+    b->blockptr = 13;      //blockæŸ¥è¯¢æŒ‡é’ˆç›´æ¥åˆ°ç¬¬13å—
     for(i = 0;i<12;i++){
-        b->discTable[0][i].data = 1; //Ç°Ê®¶ş¿éÒÑ±»Ê¹ÓÃ,±ê¼ÇÎª1
+        b->discTable[0][i].data = 1; //å‰åäºŒå—å·²è¢«ä½¿ç”¨,æ ‡è®°ä¸º1
     }
 
-    /* ³õÊ¼»¯¸ùÄ¿Â¼ */
-    p += BLOCKSIZE*(b->rootBlock-1);      //°ÑÖ¸Õë·Åµ½¸ùÊı¾İ¿éÉÏ
-    ip = Disc + BLOCKSIZE;  //µÚ¶ş¿é¿ªÊ¼´æ·Åi½Úµã
+    /* åˆå§‹åŒ–æ ¹ç›®å½• */
+    p += BLOCKSIZE*(b->rootBlock-1);      //æŠŠæŒ‡é’ˆæ”¾åˆ°æ ¹æ•°æ®å—ä¸Š
+    ip = Disc + BLOCKSIZE;  //ç¬¬äºŒå—å¼€å§‹å­˜æ”¾ièŠ‚ç‚¹
     nowTime = getNowTime();
 
     rootI = (iNode *)ip;
     rootContent = (fcb *)p;
-    b->iTable[0][0].data = 1;            //µÚ0¸öi½ÚµãÉèÖÃÎªÊ¹ÓÃ
+    b->iTable[0][0].data = 1;            //ç¬¬0ä¸ªièŠ‚ç‚¹è®¾ç½®ä¸ºä½¿ç”¨
 
-    //´æ·Å.ºÍ..ĞÅÏ¢
-    rootContent->iNum = 1;              //.ºÍ..¶¼Ö¸ÏòrootµÄi½Úµã
+    //å­˜æ”¾.å’Œ..ä¿¡æ¯
+    rootContent->iNum = 1;              //.å’Œ..éƒ½æŒ‡å‘rootçš„ièŠ‚ç‚¹
     strcpy(rootContent->fileName,".");
+    strcpy(rootContent->exName,"di");
+
 
     rootContent++;
     rootContent->iNum = 1;
     strcpy(rootContent->fileName,"..");
+    strcpy(rootContent->exName,"di");
 
-    //³õÊ¼»¯i½Úµã
-    strcpy(rootI->exName,"con");
+
+    //åˆå§‹åŒ–ièŠ‚ç‚¹
     rootI->attribute = 'c';
     rootI->blockNum = 12;
-    rootI->date = nowTime->tm_year*512 + (nowTime->tm_mon+1)*32 + nowTime->tm_mday;     //Í¨¹ıÒÆÎ»À´±£´æÈÕÆÚ
-    rootI->time = nowTime->tm_hour*2048 + nowTime->tm_min*32 + nowTime->tm_sec/2;         //Í¨¹ıÒÆÎ»À´±£´æÊ±¼ä
-    rootI->length = 2*sizeof(fcb);      //³õÊ¼Ö»ÓĞ.Óë..Á½¸öÄ¿Â¼
+    rootI->date = nowTime->tm_year*512 + (nowTime->tm_mon+1)*32 + nowTime->tm_mday;     //é€šè¿‡ç§»ä½æ¥ä¿å­˜æ—¥æœŸ
+    rootI->time = nowTime->tm_hour*2048 + nowTime->tm_min*32 + nowTime->tm_sec/2;         //é€šè¿‡ç§»ä½æ¥ä¿å­˜æ—¶é—´
+    rootI->length = 2*sizeof(fcb);      //åˆå§‹åªæœ‰.ä¸..ä¸¤ä¸ªç›®å½•
 
 
-    f = fopen(SYS_NAME,"w");            //ĞÅÏ¢Ğ´ÈëÎÄ¼ş
+    f = fopen(SYS_NAME,"w");            //ä¿¡æ¯å†™å…¥æ–‡ä»¶
     fwrite(Disc,ALLBLOCKS,1,f);
     fclose(f);
 }
@@ -191,9 +204,9 @@ void my_exit(){
 }
 
 void ls(){
-    fcb *p;             //±ãÀûÖ¸Õë
-    iNode *ip;          //i½ÚµãµÄÖ¸Õë
-    p = (fcb *)openFileList[curfd].contents;    //Ö±½Ó´Ó´ò¿ªÎÄ¼şÖĞ»ñÈ¡Ä¿Â¼
+    fcb *p;             //ä¾¿åˆ©æŒ‡é’ˆ
+    iNode *ip;          //ièŠ‚ç‚¹çš„æŒ‡é’ˆ
+    p = (fcb *)openFileList[curfd].contents;    //ç›´æ¥ä»æ‰“å¼€æ–‡ä»¶ä¸­è·å–ç›®å½•
 
     int i;
     for(i = 0; i<(int)openFileList[curfd].length/sizeof(fcb);i++){
@@ -209,8 +222,50 @@ void ls(){
     }
 }
 
+int open(unsigned char *path,int tempFd){
+    unsigned char *part;                    //è®°å½•/ä¹‹å‰çš„è·¯å¾„
+    unsigned char *splited;                 //è®°å½•/åçš„è·¯å¾„
+    int i;
+    int result;
+    int temp = 0;                               //è®°å½•è¿”å›å€¼
 
-/************************ ÒÔÏÂÎª¹¤¾ßº¯Êı *****************************/
+    if(path[0] == '\0'){                                    //é€’å½’ç»“æŸæ ‡å¿—ï¼Œå¦‚æœè·¯å¾„å·²ç»é€’å½’ç»“æŸ,è¿”å›
+        printf("success");
+        curfd = tempFd;                     //æ–‡ä»¶æœ€ç»ˆæ‰“å¼€æˆåŠŸï¼Œæ”¹å˜å½“å‰æ–‡ä»¶æè¿°ç¬¦çš„æŒ‡å‘ï¼ŒæŒ‡å‘ä¸ºæ–°æ‰“å¼€æ–‡ä»¶
+        return 0;
+    }
+
+    part = strtok(path,"/");
+
+    if(strcmp("root",part)==0){
+        splited = path+sizeof(part)+2;          //ç§»åŠ¨æŒ‡é’ˆ
+
+        result = open(splited,0);
+    }else{                          //å…¶ä½™æƒ…å†µæ˜¯åœ¨å½“å‰æŒ‡å®šç›®å½•ä¸‹é¢æŸ¥æ‰¾
+        splited = path+sizeof(part)+1;
+
+        temp = openByName(tempFd,part);
+        if(temp == -1 && temp != 0)  //è·å–æ‰“å¼€æ–‡ä»¶çš„æè¿°ç¬¦,temp=0è¯æ˜tempæœªè¢«æ›¿ä»£
+            return -1;
+        result = open(splited,tempFd);
+    }
+
+    if(result == -1){                       //å¦‚æœæ‰“å¼€å¤±è´¥åˆ™éœ€è¦é‡Šæ”¾ä¹‹å‰æ‰“å¼€çš„æ‰€æœ‰æ–‡ä»¶
+        openFileList[temp].free = 0;
+    }
+
+}
+
+void changeDir(unsigned char *path){
+    //å› ä¸º.å’Œå…¶ä½™æƒ…å†µæ‰“å¼€å‡½æ•°éƒ½å·²ç»è€ƒè™‘ï¼Œcdåªéœ€è¦è€ƒè™‘..æƒ…å†µ
+    if(strcmp("..",path) == 0)      //å¦‚æœcdåˆ°çˆ¶ç›®å½•
+        curfd = openFileList[curfd].fatherFd;   //ç›´æ¥æŠŠå½“å‰æè¿°ç¬¦æŒ‡å‘æ¢æˆçˆ¶æ–‡ä»¶æè¿°ç¬¦
+    else
+        open(path,curfd);
+}
+
+
+/************************ ä»¥ä¸‹ä¸ºå·¥å…·å‡½æ•° *****************************/
 struct tm *getNowTime(){
     time_t *now;
     struct tm *nowTime;
@@ -243,12 +298,12 @@ unsigned short getEmptyBlock(){
     block0 *b = getBlock0();
     unsigned short temp = b->blockptr;
 
-    for(;b->blockptr < ALLBLOCKS/BLOCKSIZE ;b->blockptr++){     //ÒÔ´ËÍùºó±éÀú
+    for(;b->blockptr < ALLBLOCKS/BLOCKSIZE ;b->blockptr++){     //ä»¥æ­¤å¾€åéå†
         if(isEmptyBlock(b->blockptr))
             return b->blockptr;
     }
 
-    for(b->blockptr = 0;b->blockptr<temp;b->blockptr++){        //ÔÙ´ÓÍ·±éÀúµ½ÉÏ´ÎµÄÎ»ÖÃ
+    for(b->blockptr = 0;b->blockptr<temp;b->blockptr++){        //å†ä»å¤´éå†åˆ°ä¸Šæ¬¡çš„ä½ç½®
         if(isEmptyBlock(b->blockptr))
             return b->blockptr;
     }
@@ -269,7 +324,7 @@ iNode *getI(unsigned short iNum){
     return ip;
 }
 
-int getFreeOpened(){
+int getEmptyOpened(){
     int i;
     for(i=0;i<MAX_OPEN_FILES;i++){
         if(openFileList[i].free == 0)
@@ -332,10 +387,118 @@ int isEmptyBlock(unsigned short blockNum){
         return 0;
 }
 
+void copyToOpend(int opened,iNode *ip,fcb *cp){
+    strcpy(openFileList[opened].fileName,cp->fileName);
+    strcpy(openFileList[opened].exName,cp->exName);
+    openFileList[opened].attribute = ip->attribute;
+    openFileList[opened].blockNum = ip->blockNum;
+    openFileList[opened].date = ip->date;
+    openFileList[opened].time = ip->time;
+    openFileList[opened].length = ip->length;
+
+    openFileList[opened].free = 1;
+}
+
+int writeBlock(unsigned short blockNum,int ptr,long length,char *text){
+    unsigned char *p = getBlock(blockNum);
+    if(ptr+length > BLOCKSIZE){                //
+        printf("write error: write too long !!!");
+        return -1;
+    }
+
+    p += ptr;
+    int i;
+    for(i = 0; i<length;i++,p++){
+        p[i] = text[i];
+    }
+    return 0;
+}
+
+int openByName(int fd,unsigned char *name){
+    int i;              //éå†ä½¿ç”¨
+    int tempFd;         //è®°å½•ç©ºæè¿°ç¬¦
+    int temp;           //éå†ä½¿ç”¨
+    fcb *cp;            //fcbçš„æŒ‡é’ˆ
+    iNode *ip;          //ièŠ‚ç‚¹çš„æŒ‡é’ˆ
+    unsigned char *fileName;    //æ–‡ä»¶å
+    unsigned char *exName;               //æ–‡ä»¶æ‹“å±•å
+    unsigned char *fullName;             //æ–‡ä»¶ç»å¯¹è·¯å¾„
+    unsigned char *tempFullName;
+    if(strcmp(name,".")==0)             //å¦‚æœæ–‡ä»¶åä¸º.åˆ™ä»£è¡¨è‡ªå·±ç›´æ¥è¿”å›æè¿°ç¬¦
+        return fd;
+
+    fileName = strtok(name,".");        //è·å–æ–‡ä»¶åå’Œæ‹“å±•å
+    if(fileName == NULL){               //å¦‚æœæ–‡ä»¶åä¸ºç©ºï¼Œè¯æ˜è¾“å…¥çš„æ˜¯..
+        printf("path error!!!\n");
+        return -1;
+    }
+
+    exName = strtok(NULL,".");
+    if(exName == NULL){                  //å¦‚æœæ‹“å±•åæˆªå–ä¸ºç©ºï¼Œé‚£ä¹ˆä»–çš„æ‹“å±•åå­—æ®µå¡«ä¸ºç›®å½•æ‹“å±•ådi
+        exName = (unsigned char*)malloc(3);
+        strcpy(exName,"di");
+    }
+
+    fullName = (unsigned char*)malloc(sizeof(openFileList[fd].path)+sizeof(openFileList[fd].fileName));
+    strcpy(fullName,openFileList[fd].path);
+    strcat(fullName,fileName);   //è·å–ç»å¯¹è·¯
+
+    //éå†æ¯”è¾ƒæ‰“å¼€æ–‡ä»¶æ˜¯å¦å·²æœ‰è¯¥æ–‡ä»¶
+    for(i = 0; i<MAX_OPEN_FILES; i++){
+        if(openFileList[i].free == 0)   //æœªä½¿ç”¨ç›´æ¥è·³è¿‡
+            continue;
+
+        tempFullName = (unsigned char*)malloc(sizeof(openFileList[i].path)+sizeof(openFileList[i].fileName));
+        strcpy(tempFullName,openFileList[i].path);
+        strcat(tempFullName,openFileList[i].fileName);   //è·å–ç»å¯¹è·¯å¾„
+
+        if(strcmp(fullName,tempFullName)==0 &&  //æ¯”è¾ƒç»å¯¹è·¯å¾„
+           strcmp(openFileList[i].exName,exName)==0)
+            break;
+    }
+    if(i != MAX_OPEN_FILES){                    //å¦‚æœæ²¡æœ‰éå†åˆ°æœ€åï¼Œåˆ™æ˜¯æŸ¥è¯¢åˆ°äº†ç»“æœ
+        return i;                              //ç›´æ¥æŒ‡å‘è¯¥æ‰“å¼€æ–‡ä»¶
+    }
+
+    tempFd = getEmptyOpened();                  //å¯»æ‰¾ç©ºæ‰“å¼€ä½ç½®
+    if(tempFd == -1){
+        printf("open error: open list is full !!!\n");
+        return -1;
+    }
+
+    //ä»ç›®å½•ä¸­æŸ¥è¯¢è¯¥æ–‡ä»¶
+    cp = (fcb *)openFileList[fd].contents;
+    temp = (int)openFileList[fd].length/sizeof(fcb);    //ç›®å½•çš„é•¿åº¦
+    for(i = 0; i<temp;i++,cp++){
+        if(cp->fileName[0] != '\0'){                //è¯¥ç›®å½•å­˜åœ¨
+            if(strcmp(cp->fileName,fileName)==0 &&  //æ–‡ä»¶åå’Œæ‹“å±•åç›¸åŒ
+               strcmp(cp->exName,exName) == 0)
+                break;
+        }
+    }
+    if(i == temp){                           //éå†åˆ°æœ€åä¸€ä½ï¼Œåˆ™ä»£è¡¨æ²¡æœ‰æŸ¥è¯¢æˆåŠŸ
+        printf("open error: the file do not exit !!!\n");
+        return -1;
+    }
+
+    //æŠŠæ–‡ä»¶ä¿¡æ¯å¤åˆ¶åˆ°openlistä¸­
+    ip = getI(cp->iNum);
+    copyToOpend(tempFd,ip,cp);             //å¤åˆ¶åˆ°opened
+    openFileList[tempFd].fatherFd = fd;
+    strcpy(openFileList[tempFd].path,openFileList[fd].path);
+    strcat(openFileList[tempFd].path,"/");
+    strcat(openFileList[tempFd].path,openFileList[fd].fileName);
+
+    return tempFd;
+
+}
+
+
 int main(){
     start();
+    unsigned char part[80] = "/root/test/test/te";
 
-    ls();
+    open(part,0);
 
     return 0;
 }
